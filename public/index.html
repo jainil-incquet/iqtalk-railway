@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IQTalk — Lobby & Teams</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #0f1117; color: #e8e8e8; display: flex; flex-direction: column; overflow: hidden;}
+
+.app { flex: 1; display: flex; flex-direction: column; width: 100%; max-width: 480px; margin: 0 auto; padding: 16px 16px 24px; height: 100vh;}
+
+.header { text-align: center; padding: 12px 0 18px; flex-shrink: 0;}
+.logo { font-size: 24px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+.logo span { color: #1D9E75; }
+.version { display: inline-block; margin-top: 6px; font-size: 10px; background: #0a2a20; color: #1D9E75; border: 0.5px solid #1D9E75; padding: 2px 8px; border-radius: 10px; }
+
+.card { background: #1a1d27; border: 0.5px solid #2a2d3a; border-radius: 14px; padding: 16px; margin-bottom: 12px; }
+.label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px; }
+
+input { width: 100%; background: #0f1117; border: 0.5px solid #2a2d3a; border-radius: 8px; color: #e8e8e8; font-size: 15px; padding: 11px 12px; outline: none; margin-bottom: 10px;}
+input:focus { border-color: #1D9E75; }
+
+.btn { padding: 11px 14px; border-radius: 8px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; width: 100%;}
+.btn-green { background: #1D9E75; color: white; }
+.btn-green:active { transform: scale(0.97); }
+
+/* Tabs */
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-shrink: 0;}
+.tab-btn { flex: 1; padding: 10px; background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 8px; color: #888; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.2s;}
+.tab-btn.active { background: #0a2a20; border-color: #1D9E75; color: #1D9E75; }
+
+/* Lists */
+.scroll-area { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.list-item { background: #0f1117; border: 0.5px solid #2a2d3a; border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; }
+.list-item.active-talk { border-color: #1D9E75; background: #081a14; }
+.list-item.active-direct { border-color: #378ADD; background: #0a1a2e; }
+
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.av-green { background: #0a2a20; color: #1D9E75; }
+.av-blue  { background: #0a1a2e; color: #378ADD; }
+.av-purple { background: #2a0a2a; color: #d037dd; }
+
+.info-col { flex: 1; overflow: hidden; }
+.item-title { font-size: 13px; font-weight: 500; color: #e8e8e8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.item-sub { font-size: 11px; color: #555; margin-top: 2px; }
+
+.action-btn { background: #2a2d3a; color: #aaa; border: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; user-select: none; touch-action: none;}
+.action-btn.direct { color: #378ADD; border: 0.5px solid #1a3a5a; }
+.action-btn.join { color: #1D9E75; border: 0.5px solid #0a2a20; }
+
+/* PTT Footer */
+.ptt-wrap { padding-top: 10px; flex-shrink: 0; border-top: 1px solid #2a2d3a; display: none; }
+.ptt-wrap.visible { display: block; }
+.team-indicator { text-align: center; font-size: 11px; color: #1D9E75; margin-bottom: 8px; font-weight: 600;}
+
+.ptt-btn { width: 100%; padding: 20px 16px; border-radius: 16px; border: none; font-size: 16px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px; user-select: none; touch-action: none; transition: 0.1s; background: #0a1f18; border: 1.5px solid #1D9E75; color: #1D9E75;}
+.ptt-btn.active { background: #1D9E75; color: white; transform: scale(0.97); }
+
+/* Animation */
+.wave-bar { display: flex; gap: 3px; align-items: center; height: 22px; }
+.wb { width: 3px; border-radius: 2px; background: white; animation: wave 0.7s ease-in-out infinite; }
+.wb:nth-child(1){height:5px;animation-delay:0s}
+.wb:nth-child(2){height:12px;animation-delay:0.1s}
+.wb:nth-child(3){height:20px;animation-delay:0.2s}
+.wb:nth-child(4){height:12px;animation-delay:0.3s}
+.wb:nth-child(5){height:5px;animation-delay:0.4s}
+@keyframes wave{0%,100%{transform:scaleY(0.4);opacity:0.5}50%{transform:scaleY(1);opacity:1}}
+
+/* Status */
+.conn-status { text-align: center; font-size: 11px; color: #555; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div class="logo">IQ<span>Talk</span></div>
+    <div class="version">v2.0 Lobby & Teams</div>
+  </div>
+
+  <div id="setupCard" class="card">
+    <div class="label">Your Name</div>
+    <input id="myName" placeholder="e.g. Priya" maxlength="20" autocomplete="off" />
+    <button class="btn btn-green" onclick="joinLobby()">Enter Lobby</button>
+  </div>
+
+  <div id="mainDashboard" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+    
+    <div class="tabs">
+      <button class="tab-btn active" id="tabBtnUsers" onclick="switchTab('users')">Users (<span id="userCount">0</span>)</button>
+      <button class="tab-btn" id="tabBtnTeams" onclick="switchTab('teams')">Teams (<span id="teamCount">0</span>)</button>
+    </div>
+
+    <div id="view-users" class="scroll-area">
+      </div>
+
+    <div id="view-teams" class="scroll-area" style="display:none;">
+      <div style="display:flex; gap:8px; margin-bottom: 8px;">
+        <input id="newTeamName" placeholder="New Team Name..." style="margin:0;" maxlength="15"/>
+        <button class="action-btn join" onclick="createTeam()">Create</button>
+      </div>
+      <div id="teamList"></div>
+    </div>
+
+    <div id="teamPttWrap" class="ptt-wrap">
+      <div class="team-indicator">Currently in: <span id="activeTeamName">None</span> <a href="#" onclick="leaveTeam()" style="color:#e74c3c; margin-left:8px;">Leave</a></div>
+      <button class="ptt-btn" id="pttBtn"
+        onmousedown="startTalk(event, 'team')" onmouseup="stopTalk(event)"
+        ontouchstart="startTalk(event, 'team')" ontouchend="stopTalk(event)"
+        ontouchcancel="stopTalk(event)">
+        <span id="pttIcon">🎙️</span>
+        <span id="pttLabel">Hold for Team Talk</span>
+      </button>
+    </div>
+
+    <div class="conn-status" id="connStatus">Connecting to Lobby...</div>
+  </div>
+
+</div>
+
+<div id="audioContainer"></div>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* ─── State Management ─── */
+const LOBBY_ID = 'iqtalk-lobby-root-v2';
+let peer = null;
+let myPeerId = null;
+let myName = '';
+let localStream = null;
+
+let amRegistry = false;
+
+// Global State
+let globalUsers = {}; // { pid: { name, online } }
+let globalTeams = {}; // { teamId: { name, members: [pid, pid] } }
+let myTeamId = null;
+
+// Connections
+const peers = {}; // { pid: { conn, call, audioEl } }
+
+let isTalking = false;
+let currentTab = 'users';
+
+/* ─── UI Routing ─── */
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tabBtnUsers').className = tab === 'users' ? 'tab-btn active' : 'tab-btn';
+  document.getElementById('tabBtnTeams').className = tab === 'teams' ? 'tab-btn active' : 'tab-btn';
+  document.getElementById('view-users').style.display = tab === 'users' ? 'flex' : 'none';
+  document.getElementById('view-teams').style.display = tab === 'teams' ? 'flex' : 'none';
+  renderUI();
+}
+
+function updateStatus(msg) {
+  document.getElementById('connStatus').textContent = msg;
+}
+
+/* ─── Mic Setup ─── */
+async function getMic() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    muteAll(); return true;
+  } catch(e) { alert('Microphone access required.'); return false; }
+}
+function muteAll()   { localStream && localStream.getAudioTracks().forEach(t => t.enabled = false); }
+function unmuteAll() { localStream && localStream.getAudioTracks().forEach(t => t.enabled = true);  }
+
+/* ─── Lobby Initialization ─── */
+async function joinLobby() {
+  myName = document.getElementById('myName').value.trim() || 'User';
+  if(!myName) return;
+  
+  if (!(await getMic())) return;
+
+  document.getElementById('setupCard').style.display = 'none';
+  document.getElementById('mainDashboard').style.display = 'flex';
+  
+  // Try to be the registry first
+  peer = new Peer(LOBBY_ID);
+
+  peer.on('open', id => {
+    myPeerId = id; amRegistry = true;
+    globalUsers[myPeerId] = { name: myName, online: true };
+    updateStatus('Host Lobby Node Active');
+    listenForConnections();
+    renderUI();
+  });
+
+  peer.on('error', err => {
+    if (err.type === 'unavailable-id') {
+      joinAsClient();
+    } else {
+      updateStatus('Error: ' + err.message);
+    }
+  });
+}
+
+function joinAsClient() {
+  myPeerId = 'iqclient-' + Math.random().toString(36).substr(2, 9);
+  peer = new Peer(myPeerId);
+
+  peer.on('open', id => {
+    amRegistry = false;
+    updateStatus('Connected to Global Lobby');
+    listenForConnections();
+    
+    // Connect to Lobby Host
+    const rc = peer.connect(LOBBY_ID, { metadata: { name: myName, pid: myPeerId } });
+    peers[LOBBY_ID] = { conn: rc, call: null, audioEl: null };
+    
+    rc.on('open', () => {
+      rc.send({ type: 'hello', name: myName, pid: myPeerId });
+      setupAudioCall(LOBBY_ID);
+    });
+    
+    rc.on('data', d => handleData(d, LOBBY_ID));
+    rc.on('close', () => removePeer(LOBBY_ID));
+  });
+}
+
+/* ─── Core Networking ─── */
+function listenForConnections() {
+  peer.on('connection', c => {
+    const pid = c.metadata?.pid || c.peer;
+    if (!peers[pid]) peers[pid] = { conn: c, call: null, audioEl: null };
+    else peers[pid].conn = c;
+
+    c.on('open', () => {
+      c.send({ type: 'hello', name: myName, pid: myPeerId });
+    });
+    
+    c.on('data', d => handleData(d, pid));
+    c.on('close', () => removePeer(pid));
+  });
+
+  peer.on('call', incomingCall => {
+    const pid = incomingCall.peer;
+    incomingCall.answer(localStream);
+    if (!peers[pid]) peers[pid] = { conn: null, call: incomingCall, audioEl: null };
+    else peers[pid].call = incomingCall;
+    
+    incomingCall.on('stream', s => attachAudio(pid, s));
+    incomingCall.on('close', () => removePeer(pid));
+  });
+}
+
+function connectToPeer(pid) {
+  if (peers[pid] || pid === myPeerId) return;
+  const c = peer.connect(pid, { metadata: { name: myName, pid: myPeerId } });
+  peers[pid] = { conn: c, call: null, audioEl: null };
+  
+  c.on('open', () => {
+    c.send({ type: 'hello', name: myName, pid: myPeerId });
+    setupAudioCall(pid);
+  });
+  c.on('data', d => handleData(d, pid));
+  c.on('close', () => removePeer(pid));
+}
+
+function setupAudioCall(pid) {
+  const cl = peer.call(pid, localStream);
+  if(peers[pid]) peers[pid].call = cl;
+  cl.on('stream', s => attachAudio(pid, s));
+  cl.on('close', () => removePeer(pid));
+}
+
+function attachAudio(pid, stream) {
+  let existing = document.getElementById('audio-' + pid);
+  if (existing) existing.remove();
+  const audio = document.createElement('audio');
+  audio.id = 'audio-' + pid;
+  audio.autoplay = true;
+  audio.playsInline = true;
+  audio.muted = true; // IMPORTANT: Muted by default
+  document.getElementById('audioContainer').appendChild(audio);
+  if (peers[pid]) peers[pid].audioEl = audio;
+}
+
+function removePeer(pid) {
+  if(peers[pid]?.audioEl) peers[pid].audioEl.remove();
+  delete peers[pid];
+  if(amRegistry) {
+    delete globalUsers[pid];
+    // Remove from teams
+    Object.values(globalTeams).forEach(t => {
+      t.members = t.members.filter(m => m !== pid);
+    });
+    broadcastState();
+  }
+}
+
+/* ─── Data & State Protocol ─── */
+function handleData(data, fromId) {
+  // 1. Initial Handshakes
+  if (data.type === 'hello') {
+    if(amRegistry) {
+      globalUsers[fromId] = { name: data.name, online: true };
+      broadcastState();
+    }
+  }
+
+  // 2. State Sync (Only from Registry)
+  if (data.type === 'state-sync') {
+    globalUsers = data.users;
+    globalTeams = data.teams;
+    
+    // Auto-connect to missing peers
+    Object.keys(globalUsers).forEach(uid => {
+      if(uid !== myPeerId && !peers[uid]) connectToPeer(uid);
+    });
+    renderUI();
+  }
+
+  // 3. Team Management (To Registry)
+  if (amRegistry && data.type === 'cmd-create-team') {
+    const tid = 'team-' + Date.now();
+    globalTeams[tid] = { name: data.teamName, members: [fromId] };
+    broadcastState();
+  }
+  
+  if (amRegistry && data.type === 'cmd-join-team') {
+    // Remove from old teams
+    Object.values(globalTeams).forEach(t => t.members = t.members.filter(m => m !== fromId));
+    if(globalTeams[data.teamId]) globalTeams[data.teamId].members.push(fromId);
+    broadcastState();
+  }
+
+  if (amRegistry && data.type === 'cmd-leave-team') {
+    Object.values(globalTeams).forEach(t => t.members = t.members.filter(m => m !== fromId));
+    broadcastState();
+  }
+
+  // 4. PTT Audio Routing (P2P Mesh)
+  if (data.type === 'ptt-start') {
+    const peerAudio = document.getElementById('audio-' + fromId);
+    let shouldUnmute = false;
+
+    if (data.scope === 'direct' && data.targetId === myPeerId) {
+      shouldUnmute = true;
+      setVisualState(fromId, 'active-direct', 'Direct Whisper...');
+    } 
+    else if (data.scope === 'team' && myTeamId && data.targetId === myTeamId) {
+      shouldUnmute = true;
+      setVisualState(fromId, 'active-talk', 'Team Radio...');
+    }
+
+    if(peerAudio) peerAudio.muted = !shouldUnmute;
+  }
+
+  if (data.type === 'ptt-stop') {
+    const peerAudio = document.getElementById('audio-' + fromId);
+    if(peerAudio) peerAudio.muted = true;
+    setVisualState(fromId, '', 'Online');
+  }
+}
+
+function broadcastState() {
+  if(!amRegistry) return;
+  const msg = { type: 'state-sync', users: globalUsers, teams: globalTeams };
+  Object.values(peers).forEach(p => {
+    if(p.conn?.open) p.conn.send(msg);
+  });
+  renderUI(); // Update self
+}
+
+/* ─── Actions ─── */
+function createTeam() {
+  const tName = document.getElementById('newTeamName').value.trim();
+  if(!tName) return;
+  document.getElementById('newTeamName').value = '';
+  
+  if(amRegistry) {
+    const tid = 'team-' + Date.now();
+    globalTeams[tid] = { name: tName, members: [myPeerId] };
+    myTeamId = tid;
+    broadcastState();
+  } else {
+    peers[LOBBY_ID]?.conn.send({ type: 'cmd-create-team', teamName: tName });
+    // Registry handles assigning myTeamId during state-sync via UI check logic (simulated for simplicity, we set it manually here)
+    // Actually, to keep it simple, we just wait for state sync and user manually clicks join, 
+    // OR we can optimistically set a pending state. 
+    // Better: let user click join after creation for this lightweight version.
+  }
+}
+
+function joinTeam(tid) {
+  myTeamId = tid;
+  if(amRegistry) {
+    Object.values(globalTeams).forEach(t => t.members = t.members.filter(m => m !== myPeerId));
+    globalTeams[tid].members.push(myPeerId);
+    broadcastState();
+  } else {
+    peers[LOBBY_ID]?.conn.send({ type: 'cmd-join-team', teamId: tid });
+  }
+  renderUI();
+}
+
+function leaveTeam() {
+  myTeamId = null;
+  if(amRegistry) {
+    Object.values(globalTeams).forEach(t => t.members = t.members.filter(m => m !== myPeerId));
+    broadcastState();
+  } else {
+    peers[LOBBY_ID]?.conn.send({ type: 'cmd-leave-team' });
+  }
+  renderUI();
+}
+
+/* ─── PTT Control ─── */
+function startTalk(e, scope, targetId = null) {
+  if (e) e.preventDefault();
+  if (isTalking) return;
+  
+  if (scope === 'team' && !myTeamId) return; // Cant team talk without a team
+  const actualTarget = scope === 'team' ? myTeamId : targetId;
+
+  isTalking = true;
+  unmuteAll();
+  
+  const msg = { type: 'ptt-start', scope: scope, targetId: actualTarget, name: myName, pid: myPeerId };
+  Object.values(peers).forEach(p => { if(p.conn?.open) p.conn.send(msg); });
+
+  // Update My UI
+  if(scope === 'direct') setVisualState('me', 'active-direct', 'Sending Whisper...');
+  else {
+    setVisualState('me', 'active-talk', 'Transmitting...');
+    const btn = document.getElementById('pttBtn');
+    btn.classList.add('active');
+    document.getElementById('pttIcon').innerHTML = '<div class="wave-bar"><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div><div class="wb"></div></div>';
+    document.getElementById('pttLabel').textContent = 'Speaking...';
+  }
+}
+
+function stopTalk(e) {
+  if (e) e.preventDefault();
+  if (!isTalking) return;
+  
+  isTalking = false;
+  muteAll();
+  
+  const msg = { type: 'ptt-stop', pid: myPeerId };
+  Object.values(peers).forEach(p => { if(p.conn?.open) p.conn.send(msg); });
+
+  setVisualState('me', '', 'Online');
+  const btn = document.getElementById('pttBtn');
+  btn.classList.remove('active');
+  document.getElementById('pttIcon').textContent = '🎙️';
+  document.getElementById('pttLabel').textContent = 'Hold for Team Talk';
+}
+
+/* ─── UI Rendering ─── */
+function setVisualState(pid, cssClass, text) {
+  const el = document.getElementById('item-' + pid);
+  const sub = document.getElementById('sub-' + pid);
+  if(el) {
+    el.className = 'list-item ' + cssClass;
+    if(sub) {
+      sub.textContent = text;
+      sub.style.color = cssClass ? (cssClass.includes('direct') ? '#378ADD' : '#1D9E75') : '#555';
+    }
+  }
+}
+
+function renderUI() {
+  // Update Counts
+  document.getElementById('userCount').textContent = Object.keys(globalUsers).length;
+  document.getElementById('teamCount').textContent = Object.keys(globalTeams).length;
+
+  // Render Users
+  const uView = document.getElementById('view-users');
+  uView.innerHTML = '';
+  
+  // Me First
+  uView.innerHTML += `
+    <div class="list-item" id="item-me">
+      <div class="avatar av-blue">${myName.substring(0,2).toUpperCase()}</div>
+      <div class="info-col">
+        <div class="item-title">${myName} (You)</div>
+        <div class="item-sub" id="sub-me">Online</div>
+      </div>
+    </div>`;
+
+  Object.entries(globalUsers).forEach(([uid, u]) => {
+    if(uid === myPeerId) return;
+    // Find if user is in a team
+    let uTeam = 'Lobby';
+    Object.values(globalTeams).forEach(t => { if(t.members.includes(uid)) uTeam = t.name; });
+
+    uView.innerHTML += `
+      <div class="list-item" id="item-${uid}">
+        <div class="avatar av-green">${u.name.substring(0,2).toUpperCase()}</div>
+        <div class="info-col">
+          <div class="item-title">${u.name}</div>
+          <div class="item-sub" id="sub-${uid}">${uTeam}</div>
+        </div>
+        <button class="action-btn direct" 
+          onmousedown="startTalk(event, 'direct', '${uid}')" onmouseup="stopTalk(event)"
+          ontouchstart="startTalk(event, 'direct', '${uid}')" ontouchend="stopTalk(event)"
+          ontouchcancel="stopTalk(event)">Direct Talk</button>
+      </div>`;
+  });
+
+  // Render Teams
+  const tList = document.getElementById('teamList');
+  tList.innerHTML = '';
+  Object.entries(globalTeams).forEach(([tid, t]) => {
+    const isMyTeam = myTeamId === tid;
+    tList.innerHTML += `
+      <div class="list-item" style="${isMyTeam ? 'border-color:#1D9E75;' : ''}">
+        <div class="avatar av-purple">T</div>
+        <div class="info-col">
+          <div class="item-title">${t.name}</div>
+          <div class="item-sub">${t.members.length} member(s)</div>
+        </div>
+        ${!isMyTeam ? `<button class="action-btn join" onclick="joinTeam('${tid}')">Join</button>` : `<span style="font-size:11px; color:#1D9E75; font-weight:600;">Joined</span>`}
+      </div>`;
+  });
+
+  // Manage PTT Footer visibility
+  const pttWrap = document.getElementById('teamPttWrap');
+  if(myTeamId && globalTeams[myTeamId]) {
+    pttWrap.classList.add('visible');
+    document.getElementById('activeTeamName').textContent = globalTeams[myTeamId].name;
+  } else {
+    pttWrap.classList.remove('visible');
+  }
+}
+</script>
+</body>
+</html>

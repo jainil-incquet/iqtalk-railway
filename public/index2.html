@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>IQTalk — SFU Client</title>
+</head>
+
+<body>
+    <h2>SFU Push-To-Talk</h2>
+    <button id="joinBtn">1. Connect to SFU</button>
+    <br /><br />
+    <button id="pttBtn" style="padding: 20px;" disabled>HOLD TO TALK</button>
+
+    <div id="audioContainer"></div>
+
+    <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"
+        integrity="sha384-kzavj5fiMwLKzzD1f8S7TeoVIEi7uKHvbTA3ueZkrzYq75pNQUiUi6Dy98Q3fxb0"
+        crossorigin="anonymous"></script>
+
+    <!-- FIX: correct CDN path points to the browser UMD bundle; exposes global `mediasoupClient` -->
+    <script src="https://cdn.jsdelivr.net/npm/mediasoup-client@3.7.0/dist/mediasoup-client.min.js"></script>
+
+    <script>
+        const socket = io("http://localhost:3000");
+
+        let device;
+        let sendTransport;
+        let recvTransport;
+        let audioProducer;
+        let localStream;
+        let serverRtpCapabilities = null;
+
+        socket.on('routerRtpCapabilities', (routerRtpCapabilities) => {
+            console.log("[✓] Received Router Capabilities from SFU");
+            serverRtpCapabilities = routerRtpCapabilities;
+        });
+
+        document.getElementById('joinBtn').onclick = async () => {
+            if (!serverRtpCapabilities) {
+                alert("Still waiting for server capabilities. Try again in a second.");
+                return;
+            }
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                localStream.getAudioTracks()[0].enabled = false; // muted initially for PTT
+
+                // FIX: mediasoup-client CDN exposes `mediasoupClient`, not a bare `Device` global
+                device = new mediasoupClient.Device();
+
+                await device.load({ routerRtpCapabilities: serverRtpCapabilities });
+                console.log("[✓] SFU Device Initialized & Loaded");
+
+                // FIX: both functions now return Promises so await actually waits for completion
+                await initSendTransport();
+                await initRecvTransport();
+
+                // FIX: fetch existing producers AFTER recv transport is ready
+                socket.emit('get-producers', (producerIds) => {
+                    for (const producerId of producerIds) {
+                        consumeProducer(producerId);
+                    }
+                });
+
+                document.getElementById('pttBtn').disabled = false;
+                document.getElementById('joinBtn').disabled = true;
+                document.getElementById('joinBtn').innerText = "Connected to SFU";
+
+            } catch (err) {
+                console.error("Initialization failed:", err);
+                alert("Initialization failed: " + err.message);
+            }
+        };
+
+        // FIX: wrapped in Promise so `await initSendTransport()` waits for the callback
+        function initSendTransport() {
+            return new Promise((resolve, reject) => {
+                socket.emit('createWebRtcTransport', { sender: true }, async (params) => {
+                    if (params.error) return reject(new Error(params.error));
+
+                    sendTransport = device.createSendTransport(params);
+
+                    sendTransport.on('connect', ({ dtlsParameters }, callback, errback) => {
+                        socket.emit('transport-connect', { transportId: sendTransport.id, dtlsParameters });
+                        callback();
+                    });
+
+                    sendTransport.on('produce', ({ kind, rtpParameters }, callback, errback) => {
+                        socket.emit('transport-produce',
+                            { transportId: sendTransport.id, kind, rtpParameters },
+                            ({ id, error }) => {
+                                if (error) return errback(new Error(error));
+                                callback({ id });
+                            }
+                        );
+                    });
+
+                    try {
+                        const track = localStream.getAudioTracks()[0];
+                        audioProducer = await sendTransport.produce({ track });
+                        console.log("[✓] Uplink Audio Producer Active");
+                        resolve();
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            });
+        }
+
+        // FIX: wrapped in Promise so `await initRecvTransport()` waits for the callback
+        function initRecvTransport() {
+            return new Promise((resolve, reject) => {
+                socket.emit('createWebRtcTransport', { sender: false }, (params) => {
+                    if (params.error) return reject(new Error(params.error));
+
+                    recvTransport = device.createRecvTransport(params);
+
+                    recvTransport.on('connect', ({ dtlsParameters }, callback, errback) => {
+                        socket.emit('transport-connect', { transportId: recvTransport.id, dtlsParameters });
+                        callback();
+                    });
+
+                    console.log("[✓] Downlink Transport Pipes Initialized");
+                    resolve();
+                });
+            });
+        }
+
+        async function consumeProducer(producerId) {
+            if (!recvTransport) return;
+
+            socket.emit('transport-consume', {
+                transportId: recvTransport.id,
+                producerId,
+                rtpCapabilities: device.rtpCapabilities
+            }, async (params) => {
+                if (params.error) return console.error('consume error:', params.error);
+
+                const consumer = await recvTransport.consume(params);
+                const { track } = consumer;
+
+                const audio = document.createElement('audio');
+                audio.srcObject = new MediaStream([track]);
+                audio.autoplay = true;
+                document.getElementById('audioContainer').appendChild(audio);
+                console.log("[✓] Consuming audio track from producer:", producerId);
+            });
+        }
+
+        // New producers that arrive while we are connected
+        socket.on('new-producer', ({ producerId }) => {
+            if (!recvTransport) return;
+            consumeProducer(producerId);
+        });
+
+        const pttBtn = document.getElementById('pttBtn');
+
+        pttBtn.onmousedown = () => { if (localStream) localStream.getAudioTracks()[0].enabled = true; };
+        pttBtn.onmouseup = () => { if (localStream) localStream.getAudioTracks()[0].enabled = false; };
+
+        pttBtn.ontouchstart = (e) => { e.preventDefault(); if (localStream) localStream.getAudioTracks()[0].enabled = true; };
+        pttBtn.ontouchend = (e) => { e.preventDefault(); if (localStream) localStream.getAudioTracks()[0].enabled = false; };
+    </script>
+</body>
+
+</html>
