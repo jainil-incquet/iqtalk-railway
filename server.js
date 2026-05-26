@@ -12,6 +12,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 let worker;
 let router;
+let announcedIp;
 
 // Global registries
 const transports = {};
@@ -25,7 +26,21 @@ const teams = []; // Format: [ { id, name, members: [socketId, ...] } ]
 // Per-socket resource tracking for cleanup on disconnect
 const socketData = {};
 
+async function getPublicIp() {
+  const https = require("https");
+  return new Promise((resolve) => {
+    https.get("https://api.ipify.org", (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => resolve(data.trim()));
+    }).on("error", () => resolve("127.0.0.1"));
+  });
+}
+
 async function startMediasoup() {
+  announcedIp = process.env.ANNOUNCED_IP || await getPublicIp();
+  console.log(`[✓] Using announcedIp: ${announcedIp}`);
+
   worker = await mediasoup.createWorker({
     logLevel: "warn",
     rtcMinPort: 20000,
@@ -172,7 +187,7 @@ startMediasoup()
             listenIps: [
               {
                 ip: "0.0.0.0",
-                announcedIp: "127.0.0.1", // Change to server public IP for hosting environments
+                announcedIp,
               },
             ],
             enableUdp: true,
