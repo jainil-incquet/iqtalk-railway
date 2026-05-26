@@ -211,7 +211,6 @@ startMediasoup()
       socket.on("ptt-signal-send-start", ({ scope, targetId }) => {
         console.log(`[DEBUG] [PTT] 'ptt-signal-send-start' request received. Sender: ${socket.id}, Scope: "${scope}", TargetId: "${targetId}"`);
         
-        // Direct Whisper routes to specific socket, Team Radio routes to specific project room
         if (scope === "direct") {
           console.log(`[DEBUG] [PTT] Routing direct whisper to socket ID: ${targetId}`);
           socket.to(targetId).emit("ptt-signal-start", {
@@ -242,7 +241,6 @@ startMediasoup()
         } else {
           console.log(`[DEBUG] [PTT] Socket ${socket.id} has no mapped team to signal stop. Informing all connections via broadcast.`);
         }
-        // Always fallback broadcast across all nodes to ensure clean global state termination
         socket.broadcast.emit("ptt-signal-stop", { senderSocketId: socket.id });
       });
 
@@ -250,24 +248,23 @@ startMediasoup()
       socket.on("createWebRtcTransport", async ({ sender }, callback) => {
         console.log(`[DEBUG] [WEBRTC] 'createWebRtcTransport' request received from ${socket.id}. Sender role: ${sender}`);
         try {
+          // Network Workaround: enableTcp is set to true and preferUdp is false.
+          // This allows clients to quickly fall back to ICE-over-TCP when Render firewalls drop external UDP traffic.
           const transport = await router.createWebRtcTransport({
             listenIps: [
               {
                 ip: "0.0.0.0",
-                announcedIp,
+                announcedIp: announcedIp,
               },
             ],
-            enableUdp: true,
-            enableTcp: true,
-            preferUdp: true,
+            enableUdp: true,  
+            enableTcp: true,  
+            preferUdp: false, 
           });
 
           console.log(`[DEBUG] [WEBRTC] WebRtcTransport created. ID: ${transport.id}`);
-
           transports[transport.id] = transport;
           socketData[socket.id].transportIds.push(transport.id);
-
-          console.log(`[DEBUG] [WEBRTC] Registered transport mapping for client: ${socket.id}`);
 
           callback({
             id: transport.id,
@@ -313,7 +310,6 @@ startMediasoup()
             const producer = await transport.produce({ kind, rtpParameters });
             console.log(`[DEBUG] [WEBRTC] Producer established on server. Producer ID: ${producer.id}`);
 
-            // Map producer identity back to its originating socket ID
             producers[producer.id] = {
               producerInstance: producer,
               ownerSocketId: socket.id,
@@ -322,7 +318,6 @@ startMediasoup()
 
             callback({ id: producer.id });
 
-            // Distribute new incoming feed notices *only* to appropriate project scope boundaries
             const user = users[socket.id];
             if (user && user.teamId) {
               console.log(`[DEBUG] [WEBRTC] Broadcasting 'new-producer' event for ID: ${producer.id} to team room: ${user.teamId}`);
@@ -380,7 +375,7 @@ startMediasoup()
               producerId,
               kind: consumer.kind,
               rtpParameters: consumer.rtpParameters,
-              ownerSocketId: producerRecord.ownerSocketId, // CRITICAL: Tells client who owns the stream
+              ownerSocketId: producerRecord.ownerSocketId, 
             });
           } catch (err) {
             console.error(`[DEBUG] [WEBRTC] transport-consume execution error: ${err.message}`, err);
@@ -393,13 +388,12 @@ startMediasoup()
         console.log(`[DEBUG] [WEBRTC] 'get-producers' requested by ${socket.id}`);
         const user = users[socket.id];
         
-        // Filter down to only output producers belonging to the user's active team space
         const relevantProducerIds = Object.keys(producers).filter((pid) => {
           const ownerId = producers[pid].ownerSocketId;
-          if (ownerId === socket.id) return false; // Skip self
+          if (ownerId === socket.id) return false; 
           if (!user || !user.teamId) {
             console.log(`[DEBUG] [WEBRTC] Including Producer ${pid} (Owner: ${ownerId}) for user ${socket.id} (Lobby environment fallback)`);
-            return true; // If lobby fallback, share all paths
+            return true; 
           }
           
           const isSameTeam = users[ownerId] && users[ownerId].teamId === user.teamId;
@@ -418,7 +412,6 @@ startMediasoup()
         console.log(`[-] [SOCKET] Client disconnected. Socket ID: ${socket.id}`);
         const data = socketData[socket.id];
 
-        // Clean metadata registries
         delete users[socket.id];
         teams.forEach((t) => {
           const origLength = t.members.length;
@@ -436,7 +429,6 @@ startMediasoup()
 
         console.log(`[DEBUG] [CLEANUP] Commencing cleanup of WebRTC entities for disconnected socket ${socket.id}...`);
 
-        // Gracefully terminate low-level WebRTC objects to prevent server VRAM leaks
         for (const consumerId of data.consumerIds) {
           if (consumers[consumerId]) {
             console.log(`[DEBUG] [CLEANUP] Closing consumer ${consumerId}`);
@@ -451,7 +443,6 @@ startMediasoup()
             producers[producerId].producerInstance.close();
             delete producers[producerId];
             
-            // Notify active tracking layers to clean up the closed track line
             console.log(`[DEBUG] [CLEANUP] Broadcasting 'producer-closed' notification for ${producerId}`);
             io.emit("producer-closed", { producerId });
           }
@@ -471,7 +462,7 @@ startMediasoup()
     });
 
     server.listen(process.env.PORT || 3000, () =>
-      console.log(`SFU Voice Server running on port ${process.env.PORT || 3000}`),
+      console.log(`SFU Voice Server running on port ${process.env.PORT || 3000}`)
     );
   })
   .catch((err) => {
