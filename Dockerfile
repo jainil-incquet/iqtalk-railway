@@ -16,7 +16,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install deps + compile mediasoup native worker
-RUN npm ci
+RUN npm i
 
 # Copy rest of source
 COPY . .
