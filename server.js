@@ -47,7 +47,7 @@ async function getPublicIp() {
 
 async function startMediasoup() {
   console.log("[DEBUG] [MEDIASOUP] Starting Mediasoup SFU setup...");
-  announcedIp = process.env.ANNOUNCED_IP || await getPublicIp();
+  announcedIp = "127.0.0.1"; // Default fallback
   console.log(`[✓] Using announcedIp: ${announcedIp}`);
 
   worker = await mediasoup.createWorker({
@@ -240,8 +240,8 @@ startMediasoup()
             .emit("ptt-signal-stop", { senderSocketId: socket.id });
         } else {
           console.log(`[DEBUG] [PTT] Socket ${socket.id} has no mapped team to signal stop. Informing all connections via broadcast.`);
+          socket.broadcast.emit("ptt-signal-stop", { senderSocketId: socket.id });
         }
-        socket.broadcast.emit("ptt-signal-stop", { senderSocketId: socket.id });
       });
 
       /* ─── WebRTC Transport Routines ─── */
@@ -280,13 +280,14 @@ startMediasoup()
 
       socket.on(
         "transport-connect",
-        async ({ transportId, dtlsParameters }) => {
+        async ({ transportId, dtlsParameters }, callback) => {
           console.log(`[DEBUG] [WEBRTC] 'transport-connect' for transport: ${transportId} from client: ${socket.id}`);
           const transport = transports[transportId];
           if (transport) {
             try {
               await transport.connect({ dtlsParameters });
               console.log(`[DEBUG] [WEBRTC] Successfully connected transport: ${transportId}`);
+              if (callback) callback({}); // ack back to client
             } catch (err) {
               console.error(`[DEBUG] [WEBRTC] transport-connect execution error: ${err.message}`, err);
             }
@@ -319,17 +320,10 @@ startMediasoup()
             callback({ id: producer.id });
 
             const user = users[socket.id];
-            if (user && user.teamId) {
-              console.log(`[DEBUG] [WEBRTC] Broadcasting 'new-producer' event for ID: ${producer.id} to team room: ${user.teamId}`);
-              socket
-                .to(user.teamId)
-                .emit("new-producer", { producerId: producer.id });
-            } else {
-              console.log(`[DEBUG] [WEBRTC] User not in team; broadcasting 'new-producer' event globally for ID: ${producer.id}`);
-              socket.broadcast.emit("new-producer", {
-                producerId: producer.id,
-              });
-            }
+            
+            console.log(`[DEBUG] [WEBRTC] Broadcasting 'new-producer' event globally for ID: ${producer.id}`);
+            socket.broadcast.emit("new-producer", { producerId: producer.id });
+            
           } catch (err) {
             console.error(`[DEBUG] [WEBRTC] transport-produce execution error: ${err.message}`, err);
             callback({ error: err.message });
