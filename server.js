@@ -268,9 +268,10 @@ startMediasoup()
                 announcedAddress: announcedIp,
               },
             ],
-            enableUdp: true,
+            enableUdp: false,
             enableTcp: true,
-            preferUdp: false, // prefer TCP so Render's TCP proxy is used first
+            preferTcp: true,
+            
           });
 
           console.log(`[DEBUG] [WEBRTC] WebRtcTransport created. ID: ${transport.id}`);
