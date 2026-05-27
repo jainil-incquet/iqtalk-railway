@@ -1,6 +1,6 @@
 # ─── Stage 1: Build ───────────────────────────────────────────────────────────
 # Use a full Node image with build tools so mediasoup can compile its C++ worker
-FROM node:20-bullseye-slim AS builder
+FROM node:24-bullseye-slim AS builder
 
 # mediasoup worker needs Python 3, make, g++, and pip to compile
 RUN apt-get update && apt-get install -y --no-install-recommends \
