@@ -1,8 +1,8 @@
 # ─── Stage 1: Build ───────────────────────────────────────────────────────────
-# Use a full Node image with build tools so mediasoup can compile its C++ worker
-FROM node:24-bullseye-slim AS builder
+# node:24-bookworm-slim = Debian 12 (Bookworm) — fresher packages, works with Node 24
+FROM node:24-bookworm-slim AS builder
 
-# mediasoup worker needs Python 3, make, g++, and pip to compile
+# mediasoup worker needs Python 3, make, and g++ to compile its C++ binary
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -11,10 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy package files first (Docker layer cache — only re-installs if these change)
+# Copy package files first — Docker caches this layer and skips npm ci
+# on rebuilds if package.json / package-lock.json haven't changed
 COPY package.json package-lock.json ./
 
-# Install all dependencies and compile mediasoup native worker
+# Install deps + compile mediasoup native worker
 RUN npm ci
 
 # Copy rest of source
@@ -22,34 +23,29 @@ COPY . .
 
 
 # ─── Stage 2: Production Runtime ──────────────────────────────────────────────
-# Slim image for the actual running container
-FROM node:24-bullseye-slim AS runner
+FROM node:24-bookworm-slim AS runner
 
-# mediasoup worker binary needs these at runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    && rm -rf /var/lib/apt/lists/*
-
+# mediasoup spawns its worker binary at runtime — python3 is NOT needed here,
+# only the compiled binary that was copied from the builder stage
 WORKDIR /app
 
-# Copy only what's needed from the build stage
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/server.js ./server.js
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/public ./public
+# Create a non-root user BEFORE copying files so ownership is correct
+RUN useradd -m appuser
 
-# The port your Express/Socket.io server listens on
-# Render sets PORT env var automatically; default to 3000 locally
+# Copy compiled node_modules and app source from build stage
+COPY --from=builder --chown=appuser:appuser /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:appuser /app/server.js   ./server.js
+COPY --from=builder --chown=appuser:appuser /app/package.json ./package.json
+COPY --from=builder --chown=appuser:appuser /app/public      ./public
+
+# Switch to non-root user
+USER appuser
+
+# PORT: Express/Socket.io HTTP port (Render sets this automatically)
+# 20000-20100: mediasoup RTC ports (open these in your VPS firewall)
 ENV PORT=3000
-
-# RTC port range for mediasoup WebRTC transports
-# On a real VPS, open these in your firewall: UDP/TCP 20000-20100
 EXPOSE ${PORT}
 EXPOSE 20000-20100/udp
 EXPOSE 20000-20100/tcp
-
-# Run as non-root for security
-RUN useradd -m appuser
-USER appuser
 
 CMD ["node", "server.js"]
