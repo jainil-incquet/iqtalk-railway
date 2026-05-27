@@ -6,6 +6,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^4.22.2",
     "mediasoup": "^3.19.22",
     "peer": "^1.0.2",

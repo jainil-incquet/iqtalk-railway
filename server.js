@@ -8,6 +8,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
+const dotenv = require("dotenv");
+dotenv.config();
+
 app.use(express.static(path.join(__dirname, "public")));
 
 let worker;
@@ -248,18 +251,26 @@ startMediasoup()
       socket.on("createWebRtcTransport", async ({ sender }, callback) => {
         console.log(`[DEBUG] [WEBRTC] 'createWebRtcTransport' request received from ${socket.id}. Sender role: ${sender}`);
         try {
-          // Network Workaround: enableTcp is set to true and preferUdp is false.
-          // This allows clients to quickly fall back to ICE-over-TCP when Render firewalls drop external UDP traffic.
+          // Render blocks raw UDP on arbitrary ports. We enable both UDP and TCP,
+          // but force TCP preference so ICE uses the TCP candidate that Render exposes
+          // via its HTTPS/WSS proxy port (443). UDP is kept on as a fallback for
+          // environments that do support it (e.g. local dev, VPS with open ports).
           const transport = await router.createWebRtcTransport({
-            listenIps: [
+            listenInfos: [
               {
+                protocol: "udp",
                 ip: "0.0.0.0",
-                announcedIp: announcedIp,
+                announcedAddress: announcedIp,
+              },
+              {
+                protocol: "tcp",
+                ip: "0.0.0.0",
+                announcedAddress: announcedIp,
               },
             ],
-            enableUdp: true,  
-            enableTcp: true,  
-            preferUdp: false, 
+            enableUdp: true,
+            enableTcp: true,
+            preferUdp: false, // prefer TCP so Render's TCP proxy is used first
           });
 
           console.log(`[DEBUG] [WEBRTC] WebRtcTransport created. ID: ${transport.id}`);
