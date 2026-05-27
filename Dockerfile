@@ -1,7 +1,10 @@
 FROM node:24-bookworm-slim
 
-# mediasoup needs these to compile its C++ worker
-RUN apt-get update && apt-get install -y python3 build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
