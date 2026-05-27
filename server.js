@@ -47,7 +47,7 @@ async function getPublicIp() {
 
 async function startMediasoup() {
   console.log("[DEBUG] [MEDIASOUP] Starting Mediasoup SFU setup...");
-  announcedIp = "127.0.0.1"; // Default fallback
+  announcedIp = process.env.ANNOUNCED_IP || (await getPublicIp()); // Default fallback
   console.log(`[✓] Using announcedIp: ${announcedIp}`);
 
   worker = await mediasoup.createWorker({
