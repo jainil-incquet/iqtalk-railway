@@ -55,8 +55,8 @@ async function startMediasoup() {
 
   worker = await mediasoup.createWorker({
     logLevel: "warn",
-    rtcMinPort: 20000,
-    rtcMaxPort: 20100,
+    rtcMinPort: 3100,
+    rtcMaxPort: 4100,
   });
 
   console.log(`[DEBUG] [MEDIASOUP] Worker successfully created. PID: ${worker.pid}`);
