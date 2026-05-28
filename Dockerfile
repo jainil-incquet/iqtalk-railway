@@ -1,20 +1,18 @@
-FROM node:24-bookworm-slim
+FROM node:18-slim
 
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
+# Install curl for IP discovery and build tools for mediasoup
+RUN apt-get update && apt-get install -y curl python3 make g++ gcc
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-
-RUN npm i --legacy-peer-deps
+COPY package*.json ./
+RUN npm install
 
 COPY . .
 
-EXPOSE 3000
-EXPOSE 20000-20100/udp
+# Make the script executable
+RUN chmod +x entrypoint.sh
 
-CMD ["node", "server.js"]
+# Use the script as the entrypoint
+ENTRYPOINT ["./entrypoint.sh"]
+CMD ["npm", "start"]
